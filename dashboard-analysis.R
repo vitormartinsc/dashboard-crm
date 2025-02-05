@@ -16,13 +16,20 @@ df %>%
 
 new_df %>% 
   group_by(stage_status, stage_detail) %>% 
-  summarise(total_by_stage = n()) %>% 
-  ungroup() %>% 
-  ggplot(aes(stage_detail, total_by_stage, color=stage_status)) + 
-  geom_line(size = 1.2, aes(color = stage_status, group=stage_status)) + 
-  geom_point(size=2)+
-  #geom_point(size = 3) + 
-  labs(title = "Total por Status de Estágio",
+  summarise(total_by_stage = n(), .groups = "drop") %>% 
+  rename(
+    `Nome do Estágio` = stage_detail,
+    `Quantidade Total` = total_by_stage,
+    `Status do Estágio` = stage_status
+  ) %>%
+  ggplot(aes(x = `Nome do Estágio`, y = `Quantidade Total`, group = `Status do Estágio`, color = `Status do Estágio`)) + 
+  geom_line(size = 1.2) + 
+  geom_point(size = 2, show.legend = F) +
+  
+  # Adiciona os labels acima dos pontos
+  geom_text(aes(label = `Quantidade Total`, y = `Quantidade Total` + 40), vjust = 100,size = 4) +
+  
+  labs(title = "Total de Negócios por Status de Estágio",
        x = "Número do Estágio",
        y = "Total por Estágio",
        color = "Status") +
@@ -33,83 +40,59 @@ new_df %>%
     legend.title = element_text(size = 12),
     legend.text = element_text(size = 10),
     axis.text.x = element_text(angle = 45, hjust = 1)
-  )  +
-  
-  coord_cartesian(ylim = c(0, 1000))  #
+  ) +
+  coord_cartesian(ylim = c(0, 1000)) -> p
+
+ggplotly(p)   # Ajusta o eixo Y sem cortar dados
 
 
 
-plotly_chart <- ggplotly(p)
+new_df %>% 
+  group_by(stage_status, stage_detail) %>% 
+  summarise(total_by_stage = n()) %>% 
+  ungroup() %>% 
+  rename(
+    `Nome do Estágio` = stage_detail,
+    `Quantidade Total` = total_by_stage,
+    `Status do Estágio` = stage_status
+  ) %>%
+  ggplot(aes(x = `Nome do Estágio`, y = `Quantidade Total`, fill = `Status do Estágio`)) + 
+  geom_col(position = "dodge", width = 0.7) +
+  labs(
+    title = "Total por Status de Estágio",
+    x = "Nome do Estágio",
+    y = "Quantidade Total",
+    fill = "Status do Estágio"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  coord_cartesian(ylim = c(0, 1000))  -> p
 
-library(shiny)
-library(shinydashboard)
-library(ggplot2)
-library(dplyr)
-library(plotly)
 
-# UI - Interface do Usuário
-ui <- dashboardPage(
-  dashboardHeader(title = "Dashboard de Estágios"),
-  dashboardSidebar(
-    # Filtro para o Gráfico 1 (Filtrar por Status)
-    selectInput("status", "Selecione o Status para o Gráfico 1:", 
-                choices = unique(new_df$stage_status), selected = "A")
-  ),
-  dashboardBody(
-    fluidRow(
-      # Gráfico 1: Com filtro por status
-      box(title = "Gráfico 1: Por Status", plotlyOutput("grafico1"), width = 12),
-    ),
-    fluidRow(
-      # Gráfico 2: Sem filtro (todos os dados)
-      box(title = "Gráfico 2: Todos os Dados", plotlyOutput("grafico2"), width = 12)
-    )
-  )
-)
 
-# Server - Lógica do Dashboard
-server <- function(input, output) {
-  
-  # Gráfico 1 - Com filtro por status
-  output$grafico1 <- renderPlotly({
-    # Criando o gráfico com ggplot
-    p1 <- new_df %>%
-      filter(stage_status == input$status) %>%
-      group_by(stage_status, stage_name) %>%
-      summarise(total_by_stage = n(), .groups = "drop") %>%
-      ggplot(aes(x = stage_name, y = total_by_stage, color = stage_status)) +
-      geom_line(size = 1.2) +  # Linha para cada grupo
-      geom_point(size = 3) +   # Pontos para cada grupo
-      labs(title = "Total por Status de Estágio (Filtrado)",
-           x = "Nome do Estágio",
-           y = "Total por Estágio",
-           color = "Status") +
-      theme_minimal() +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotacionar os nomes do eixo X
-    
-    # Transformar o gráfico ggplot em interativo com ggplotly
-    ggplotly(p1)
-  })
-  
-  # Gráfico 2 - Sem filtro (todos os dados)
-  output$grafico2 <- renderPlotly({
-    # Criando o gráfico com ggplot para todos os dados
-    p2 <- new_df %>%
-      group_by(stage_status, stage_name) %>%
-      summarise(total_by_stage = n(), .groups = "drop") %>%
-      ggplot(aes(x = stage_name, y = total_by_stage, color = stage_status)) +
-      geom_line(size = 1.2) +  # Linha para cada grupo
-      geom_point(size = 3) +   # Pontos para cada grupo
-      labs(title = "Total por Status de Estágio (Todos)",
-           x = "Nome do Estágio",
-           y = "Total por Estágio",
-           color = "Status") +
-      theme_minimal() +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotacionar os nomes do eixo X
-    
-    # Transformar o gráfico ggplot em interativo com ggplotly
-    ggplotly(p2)
-  })
-}
-# Rodar o app
-shinyApp(ui = ui, server = server)
+
+ggplotly(p)
+
+
+new_df %>% 
+  group_by(stage_status, stage_detail) %>% 
+  summarise(total_by_stage = n()) %>% 
+  ungroup %>% 
+  group_by(stage_status) %>% 
+  mutate(percent_by_stage = total_by_stage / sum(total_by_stage))
+
+
+new_df %>% 
+  group_by(stage_status, stage_detail) %>% 
+  summarise(total_by_stage = n(), .groups = "drop") %>% 
+  rename(
+    `Nome do Estágio` = stage_detail,
+    `Quantidade Total` = total_by_stage,
+    `Status do Estágio` = stage_status
+  ) %>% 
+  write_csv('teste.csv')
+
+
+

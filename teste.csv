@@ -1,0 +1,40 @@
+Status do Estágio,Nome do Estágio,Quantidade Total
+Em andamento,1.1 LEADS,5477
+Em andamento,1.2 QUALIFICAÇÃO,3
+Em andamento,1.3 DIAGNÓSTICO,157
+Em andamento,1.4 NEGOCIAÇÃO,7
+Em andamento,2.1 VALIDAÇÃO,13
+Em andamento,2.2 CADASTRO,38
+Em andamento,2.3 VINCULAÇÃO,24
+Em andamento,2.4 LOGÍSTICA,7
+Em andamento,2.5 ONBOARDING,85
+Em andamento,3.1 NOVOS ATIVOS,4
+Em andamento,3.2 ATIVOS,24
+Em andamento,3.3 RISCO DE CHURN,17
+Em andamento,3.4 CHURN,17
+Em andamento,4.1 COMUNICAÇÃO,39
+Em andamento,4.2 ACOMPANHAR POSTAGEM,14
+Em andamento,4.3 RECEBIMENTO,1
+Em andamento,4.4 REINTEGRAÇÃO,7
+Em andamento,5.2 LINK CADASTRO,8
+Em andamento,5.4 LINK TRANSAÇÃO,2
+Ganho,1.1 LEADS,31
+Ganho,1.2 QUALIFICAÇÃO,1
+Ganho,2.1 VALIDAÇÃO,10
+Ganho,2.2 CADASTRO,12
+Ganho,2.3 VINCULAÇÃO,9
+Ganho,2.5 ONBOARDING,14
+Perdido,1.1 LEADS,33
+Perdido,1.2 QUALIFICAÇÃO,6
+Perdido,1.3 DIAGNÓSTICO,244
+Perdido,1.4 NEGOCIAÇÃO,262
+Perdido,2.1 VALIDAÇÃO,6
+Perdido,2.2 CADASTRO,52
+Perdido,2.3 VINCULAÇÃO,6
+Perdido,2.5 ONBOARDING,2
+Perdido,3.1 NOVOS ATIVOS,3
+Perdido,3.2 ATIVOS,3
+Perdido,3.3 RISCO DE CHURN,4
+Perdido,3.4 CHURN,8
+Perdido,5.2 LINK CADASTRO,6
+Perdido,5.4 LINK TRANSAÇÃO,9
