@@ -167,5 +167,16 @@ plot_df %>%
   )
 
 
+df %>% 
+  filter(!(is.na(organization) & is.na(person))) %>% 
+  mutate(id = ifelse(is.na(person), organization, person),
+         type = ifelse(is.na(person), 'organization', 'person')) %>% 
+  select(-person, -organization) %>% 
+  group_by(id) %>% 
+  filter(date_created == max(date_created)) %>% 
+  group_by(id) %>% 
+  summarise(n = n()) %>% 
+  arrange(-n)
+
 
   
