@@ -172,11 +172,176 @@ df %>%
   mutate(id = ifelse(is.na(person), organization, person),
          type = ifelse(is.na(person), 'organization', 'person')) %>% 
   select(-person, -organization) %>% 
+  mutate(stage_name = gsub("^\\d+\\s*", "", stage_name)) -> new_df
+
+new_df %>% 
   group_by(id) %>% 
   filter(date_created == max(date_created)) %>% 
+  group_by(stage_name) %>% 
+  mutate(stage_count = n()) %>% 
+  ungroup %>% 
+  select(stage_name, date_created, stage_count, stage_number) -> df_by_stage_name
+
+new_df %>% 
   group_by(id) %>% 
-  summarise(n = n()) %>% 
-  arrange(-n)
+  filter(date_created == max(date_created)) %>% 
+  group_by(stage_detail) %>% 
+  mutate(stage_count = n()) %>% 
+  ungroup %>% 
+  select(stage_name, stage_detail, date_created, stage_count) -> df_by_stage_detail
+
+library(shiny)
+library(tidyverse)
+library(lubridate)
+library(plotly)
+
+# UI - Interface
+ui <- fluidPage(
+  titlePanel("Dashboard de Stage Count"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      dateInput("date_filter", "Selecione a Data:", 
+                value = max(df$date_created), 
+                format = "dd/mm/yyyy", 
+                language = "pt-BR"),
+      
+      selectInput("stage_filter", "Selecione o Tipo de Detalhamento:",
+                  choices = c("Geral", unique(new_df$stage_name)),  # Adiciona "Geral" + detalhes disponíveis
+                  selected = "Geral"),
+      checkboxInput("compare", "Comparar as Datas", value = FALSE) 
+    ),
+    
+    mainPanel(
+      plotlyOutput("stage_plot", height = '700px'), width = 10
+    )
+  )
+  
+)
+
+
+
+# Server - Processamento
+server <- function(input, output) {
+  
+  filtered_data <- reactive({
+    
+    if (input$stage_filter == "Geral") {
+      data <- new_df %>% 
+        group_by(stage_name) %>%  # Agrupar por stage_name
+        filter(date_created <= input$date_filter) %>% 
+        mutate(stage_count = n()) %>%  # Contagem de cada stage
+        ungroup() %>% 
+        select(stage_name, date_created, stage_count, stage_number) %>% 
+        rename(id = stage_name) %>% 
+        group_by(id) %>% 
+        filter(date_created == max(date_created))  # Pega a data mais recente
+      
+      print(data)
+      
+      # Dados para comparação
+      data_to_compare <- new_df %>% 
+        group_by(stage_name) %>%  # Agrupar por stage_name
+        filter(date_created == max(date_created)) %>% 
+        mutate(today_count = n()) %>%  # Contagem de hoje
+        ungroup() %>% 
+        select(stage_name, date_created, today_count, stage_number) %>% 
+        rename(id = stage_name) %>% 
+        group_by(id) %>% 
+        filter(date_created == max(date_created))  # Pega a data mais recente
+      print(data_to_compare)
+      
+    } else {
+      data <- new_df %>% 
+        filter(date_created <= input$date_filter, stage_name == input$stage_filter) %>% 
+        group_by(stage_detail) %>% 
+        mutate(stage_count = n()) %>%  # Contagem de cada stage
+        ungroup() %>% 
+        select(stage_name, stage_detail, date_created, stage_count, stage_number) %>% 
+        rename(id = stage_detail) %>% 
+        group_by(id) %>% 
+        filter(date_created == max(date_created)) %>% 
+        ungroup() %>% 
+        select(-stage_name)
+      
+      print(data)
+      
+      # Dados para comparação
+      data_to_compare <- new_df %>% 
+        filter(stage_name == input$stage_filter) %>% 
+        group_by(stage_detail) %>% 
+        mutate(today_count = n()) %>%
+        filter(date_created == max(date_created)) %>% # Contagem de hoje
+        ungroup() %>% 
+        select(stage_detail, stage_name, date_created, today_count, stage_number) %>% 
+        rename(id = stage_detail) %>% 
+        group_by(id) %>% 
+        filter(date_created == max(date_created)) %>% 
+        ungroup() %>% 
+        select(-stage_name)
+      
+      print(data_to_compare)
+    }
+    
+    # Se for para comparar com a data mais recente
+    if (input$compare) {
+      final_data <- data %>% 
+        left_join(data_to_compare, by = 'id')  # Junção entre os dados
+    } else {
+      final_data <- data %>% mutate(count_value = stage_count)
+        
+    }
+    
+    print(final_data)
+    
+    return(final_data)
+  })
+  
+
+  
+  output$stage_plot <- renderPlotly({
+    
+    # Verifica se a comparação está ativada
+    data_for_plot <- filtered_data()
+    
+    if (input$compare) {
+      data_for_plot <- data_for_plot %>%
+        pivot_longer(cols = c(stage_count, today_count), names_to = "count_type", values_to = "count_value")
+      
+    }
+    
+    adjusted_size = data_for_plot$count_value %>% max
+    
+    print('plot::::')
+    print(data_for_plot)
+    
+    if (input$compare && "count_type" %in% colnames(data_for_plot)) {
+      p <- ggplot(data_for_plot, aes(x = id, y = count_value, fill = count_type))
+    } else {
+      p <- ggplot(data_for_plot, aes(x = id, y = stage_count))
+    }
+    
+    p <- p +
+      geom_col(position = "dodge", width = 0.6) +  # Barras lado a lado
+      geom_text(aes(label = count_value, y = count_value + adjusted_size * 0.01), color = "#003366", fontface = "bold") +  
+      theme_minimal(base_size = 14) +
+      labs(title = "Stage Count por Stage Name", x = "Stage Name", y = "Stage Count") +
+      theme(
+        panel.background = element_rect(fill = "white", color = NA),
+        plot.background = element_rect(fill = "white", color = NA),
+        axis.text.x = element_text(color = "#003366", size = 12, face = "bold", angle = 45),
+        axis.text.y = element_text(color = "#003366", size = 12, face = "bold"),
+        plot.title = element_text(color = "#003366", face = "bold", size = 16, hjust = 0.5)
+      ) #+ 
+      #scale_fill_manual(values = c("#003366"))
+    
+    ggplotly(p)
+  })
+}
+
+# Rodar o App
+shinyApp(ui, server)
+
 
 
   
