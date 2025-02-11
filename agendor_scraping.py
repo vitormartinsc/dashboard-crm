@@ -1,6 +1,5 @@
 import dash
-from dash import dcc, html
-from dash.dependencies import Input, Output, State
+from dash import Dash, html, dcc, Input, Output, State
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
@@ -42,8 +41,14 @@ def process_data(deals):
         deal_by_stage['stage_number'].append(int(deal['dealStage']['sequence']))
         deal_by_stage['stage_name'].append(deal['dealStage']['funnel']['name'])
         deal_by_stage['stage_status'].append(deal['dealStatus']['name'])
-        deal_by_stage['person'].append(deal.get('person', {}).get('id'))
-        deal_by_stage['organization'].append(deal.get('organization', {}).get('id'))
+        if deal['person']:
+            deal_by_stage['person'].append(deal.get('person', {}).get('id'))
+        else:
+            deal_by_stage['person'].append(None)
+        if deal['organization']:
+            deal_by_stage['organization'].append(deal.get('organization', {}).get('id'))
+        else: 
+            deal_by_stage['organization'].append(None)
         deal_by_stage['date_created'].append(deal['createdAt'])
         deal_by_stage['date_won'].append(deal['wonAt'])
         deal_by_stage['date_lost'].append(deal['lostAt'])
