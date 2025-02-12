@@ -66,10 +66,6 @@ def process_bar_data(df):
 df = process_data()
 df_line = process_line_data(df)
 df_line['date_created'] = pd.to_datetime(df_line['date_created']).dt.date
-df_stage_counts = df.loc[df.groupby('id')['date_created'].idxmax()]
-stage_counts = df_stage_counts['stage_name'].value_counts().reset_index()
-stage_counts.columns = ['Stage Name', 'Client Count']
-
 df_bar = process_bar_data(df)
 
 # Função de processamento de dados
@@ -126,6 +122,11 @@ leads_df = leads_df[leads_df['date_created'] >= leads_start_date]
 # Contando a quantidade de leads por data
 leads_count = leads_df.groupby('date_created').size().reset_index(name='total_leads')
 
+df_stage_counts = df.loc[df.groupby('id')['date_created'].idxmax()]
+
+stage_counts = df_stage_counts['stage_name'].value_counts().reset_index()
+stage_counts.columns = ['Stage Name', 'Client Count']
+
 
 # Layout do dashboard
 app.layout = html.Div(children=[
@@ -135,9 +136,26 @@ app.layout = html.Div(children=[
         html.H1("Essencial", style={'color': '#003366', 'margin': '0'})
     ], style={'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'padding': '20px'}),
     
+    # Dropdown estilizado e centralizado
+    html.Div([
+        dcc.Dropdown(
+            id='stage-detail-filter',
+            options=[{'label': 'Geral', 'value': 'Geral'}] + 
+                    [{'label': stage, 'value': stage} for stage in sorted(df_line['stage_name'].unique())],
+            value='Geral',
+            clearable=False,
+            style={
+                'width': '80%', 'padding': '12px', 'borderRadius': '10px',
+                'backgroundColor': '#f5f5f5', 'border': '1px solid #ccc',
+                'fontSize': '20px', 'textAlign': 'center', 'margin-top': '5px'
+            }
+        )
+    ], style={'display': 'flex', 'justify-content': 'center', 'margin-top': '20px', 'margin-bottom': '20px'}),
+    
     html.Div([
         html.H3("Contagem de Cliente por Estágio", style={'color': '#003366', 'textAlign': 'center', 'margin-bottom': '20px'}),
         dash_table.DataTable(
+            id='client-stage-table',  # Adicionamos um ID para o callback
             columns=[
                 {'name': 'Nome do Estágio', 'id': 'Stage Name'},
                 {'name': 'Quantidade de Clientes', 'id': 'Client Count'}
@@ -262,18 +280,20 @@ def update_filters(n_clicks, remove_clicks, children):
 
     return children
 
-# Criar a ordem de stage_detail globalmente com base no df_line original
-stage_order = sorted(df_line['stage_detail'].unique(), key=sort_stage_detail)
 
-# Criar um dicionário para mapear cada stage_detail para seu índice ordenado
-stage_order_map = {stage: i for i, stage in enumerate(stage_order)}
+# Criamos um DataFrame auxiliar para mapear stage_name e stage_detail
+df_stage_mapping = df_line[['stage_name', 'stage_detail']].drop_duplicates(subset=['stage_detail'])
+
+# Filtramos apenas os detalhes ordenados e fazemos um merge para manter a relação com stage_name
+df_stage_mapping = df_stage_mapping.sort_values(by='stage_detail', key=lambda x: x.map(sort_stage_detail))
 
 @app.callback(
     Output('line-chart', 'figure'),
     [Input({'type': 'date-filter', 'index': dash.ALL}, 'start_date'),
-     Input({'type': 'date-filter', 'index': dash.ALL}, 'end_date')]
-)
-def update_chart(start_dates, end_dates):
+    Input({'type': 'date-filter', 'index': dash.ALL}, 'end_date'),
+    Input('stage-detail-filter', 'value'),
+])
+def update_chart(start_dates, end_dates, selected_stage_name):
     fig = go.Figure()
     if not start_dates or not end_dates:
         return fig
@@ -283,6 +303,10 @@ def update_chart(start_dates, end_dates):
             start_date = datetime.fromisoformat(start_date).date()
             end_date = datetime.fromisoformat(end_date).date()
             filtered_df = df_line[(df_line['date_created'] >= start_date) & (df_line['date_created'] <= end_date)]
+            
+            if selected_stage_name != 'Geral':
+                filtered_df = filtered_df[filtered_df['stage_name'] == selected_stage_name]
+            
             filtered_df = filtered_df.loc[filtered_df.groupby('id')['date_created'].idxmax()]
 
             # Agrupar os dados por 'stage_detail'
@@ -313,6 +337,27 @@ def update_chart(start_dates, end_dates):
     )
 
     return fig
+
+@app.callback(
+    Output('client-stage-table', 'data'), # Atualiza a tabela
+    [Input('stage-detail-filter', 'value')]
+)
+def update_data_table(selected_stage_name):
+    global df_stage_counts
+    df_stage_counts_temp = df_stage_counts.copy()
+    
+    # Se for "Geral", mostrar todos os estágios
+    if selected_stage_name == 'Geral':
+        stage_counts = df_stage_counts_temp['stage_name'].value_counts().reset_index()
+        stage_counts.columns = ['Stage Name', 'Client Count']
+    else: 
+        df_stage_counts_temp = df_stage_counts_temp[df_stage_counts_temp['stage_name'] == selected_stage_name]
+        stage_counts = df_stage_counts_temp['stage_detail'].value_counts().reset_index()
+        stage_counts.columns = ['Stage Name', 'Client Count']
+        
+    return stage_counts.to_dict('records')  # Retorna os dados no formato correto
+
+        
     
 if __name__ == '__main__':
     app.run_server(debug=True, use_reloader=False)
