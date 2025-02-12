@@ -102,5 +102,4 @@ def process_bar_data(df):
 # Buscar os dados **apenas uma vez** ao iniciar o servidor
 deals = fetch_data()
 df = process_data(deals)
-df_line = process_line_data(df)
-df_bar = process_bar_data(df)
+df.to_csv('deals_to_stage.csv')

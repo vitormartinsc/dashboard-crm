@@ -1,5 +1,5 @@
 import dash
-from dash import Dash, html, dcc, Input, Output, State
+from dash import Dash, html, dcc, Input, Output, State, dash_table
 import pandas as pd
 import requests
 import os
@@ -66,6 +66,9 @@ def process_bar_data(df):
 df = process_data()
 df_line = process_line_data(df)
 df_line['date_created'] = pd.to_datetime(df_line['date_created']).dt.date
+df_stage_counts = df.loc[df.groupby('id')['date_created'].idxmax()]
+stage_counts = df_stage_counts['stage_name'].value_counts().reset_index()
+stage_counts.columns = ['Stage Name', 'Client Count']
 
 df_bar = process_bar_data(df)
 
@@ -101,7 +104,7 @@ external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 # Criar o aplicativo Dash
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server  # Esta linha é crucial para o deploy com Gunicorn
-app.title = "Dashboard de Stage Detail"
+app.title = "Essencial - Dashbard"
 
 # Valor inicial do filtro de data
 default_start_date = datetime.today() - timedelta(days=60)
@@ -123,9 +126,37 @@ leads_df = leads_df[leads_df['date_created'] >= leads_start_date]
 # Contando a quantidade de leads por data
 leads_count = leads_df.groupby('date_created').size().reset_index(name='total_leads')
 
+
 # Layout do dashboard
 app.layout = html.Div(children=[
-    html.H1(children="Dashboard de Stage Detail", style={'textAlign': 'center', 'color': '#003366'}),
+    # Cabeçalho com título e logo
+    html.Div([
+        html.Img(src='../assets/essencial_logo.jpg', style={'height': '80px', 'margin-right': '20px'}),
+        html.H1("Essencial", style={'color': '#003366', 'margin': '0'})
+    ], style={'display': 'flex', 'align-items': 'center', 'justify-content': 'center', 'padding': '20px'}),
+    
+    html.Div([
+        html.H3("Contagem de Cliente por Estágio", style={'color': '#003366', 'textAlign': 'center', 'margin-bottom': '20px'}),
+        dash_table.DataTable(
+            columns=[
+                {'name': 'Nome do Estágio', 'id': 'Stage Name'},
+                {'name': 'Quantidade de Clientes', 'id': 'Client Count'}
+            ],
+            data=stage_counts.to_dict('records'),
+            style_table={'margin': 'auto', 'width': '60%', 'borderRadius': '10px', 'overflow': 'hidden'},
+            style_header={
+                'backgroundColor': '#003366', 'color': 'white', 'fontWeight': 'bold', 'textAlign': 'center',
+                'border': '1px solid white'
+            },
+            style_data={
+                'backgroundColor': '#f9f9f9', 'color': '#003366', 'textAlign': 'center', 'border': '1px solid #ddd'
+            },
+            style_data_conditional=[
+                {'if': {'row_index': 'odd'}, 'backgroundColor': '#e6f2ff'}
+            ],
+            page_size=10
+        )
+    ], style={'margin-bottom': '40px'}),
 
     # Container para os filtros dinâmicos
     html.Div(id='date-filters-container', children=[
