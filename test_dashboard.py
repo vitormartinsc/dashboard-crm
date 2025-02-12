@@ -141,7 +141,8 @@ app.layout = html.Div(children=[
         dcc.Dropdown(
             id='stage-detail-filter',
             options=[{'label': 'Geral', 'value': 'Geral'}] + 
-                    [{'label': stage, 'value': stage} for stage in sorted(df_line['stage_name'].unique())],
+                    [{'label': stage, 'value': stage} for stage in sorted(df_line['stage_name'].unique()) 
+                     if stage != "AMBULANTE ESSENCIAL"],
             value='Geral',
             clearable=False,
             style={
@@ -225,7 +226,8 @@ app.layout = html.Div(children=[
             plot_bgcolor='rgba(0,0,0,0)', 
             paper_bgcolor='rgba(0,0,0,0)', 
             font={'color': '#003366'}
-        )
+        ),
+        style={'display': 'block'}
     ),
     
 ], style={'font-family': 'Arial, sans-serif', 'padding': '20px', 'backgroundColor': '#FFFFFF'})
@@ -306,6 +308,10 @@ def update_chart(start_dates, end_dates, selected_stage_name):
             
             if selected_stage_name != 'Geral':
                 filtered_df = filtered_df[filtered_df['stage_name'] == selected_stage_name]
+                full_df = df_stage_mapping[df_stage_mapping['stage_name'] == selected_stage_name]
+                full_df = full_df[['stage_detail']]
+            else:
+                full_df = df_stage_mapping[['stage_detail']]
             
             filtered_df = filtered_df.loc[filtered_df.groupby('id')['date_created'].idxmax()]
 
@@ -313,7 +319,6 @@ def update_chart(start_dates, end_dates, selected_stage_name):
             filtered_df = filtered_df.groupby('stage_detail').size().reset_index(name='total')
 
             # Adicionar valores ausentes para garantir alinhamento com o eixo X fixo
-            full_df = pd.DataFrame({'stage_detail': stage_order})  # Eixo X fixo
             filtered_df = full_df.merge(filtered_df, on='stage_detail', how='left').fillna(0)
 
             # Adicionar linha ao gráfico
@@ -329,7 +334,7 @@ def update_chart(start_dates, end_dates, selected_stage_name):
         title="Evolução por Stage Detail",
         xaxis_title="Stage Detail",
         yaxis_title="Total",
-        xaxis=dict(categoryorder='array', categoryarray=stage_order),  # Fixar a ordem do eixo X
+        xaxis=dict(categoryorder='array', categoryarray=full_df['stage_detail']),  # Fixar a ordem do eixo X
         plot_bgcolor='rgba(0,0,0,0)', 
         paper_bgcolor='rgba(0,0,0,0)', 
         font={'color': '#003366'},
@@ -352,12 +357,63 @@ def update_data_table(selected_stage_name):
         stage_counts.columns = ['Stage Name', 'Client Count']
     else: 
         df_stage_counts_temp = df_stage_counts_temp[df_stage_counts_temp['stage_name'] == selected_stage_name]
-        stage_counts = df_stage_counts_temp['stage_detail'].value_counts().reset_index()
+                                
+        stage_counts = (df_stage_counts_temp['stage_detail']
+                        .value_counts()
+                        .reset_index()
+                        .sort_values(by='stage_detail', key=lambda x: x.map(sort_stage_detail)))
         stage_counts.columns = ['Stage Name', 'Client Count']
         
     return stage_counts.to_dict('records')  # Retorna os dados no formato correto
 
-        
+@app.callback(
+    Output('bar-chart', 'figure'),
+    Input('stage-detail-filter', 'value')
+)
+def update_bar_chart(selected_stage_name):
+    # Filtrar os dados conforme a seleção do dropdown
+    if selected_stage_name == 'Geral':
+        filtered_df = df_bar.copy()  # Mantém todos os dados
+    else:
+        filtered_df = (
+            df[df['stage_name'] == selected_stage_name]  # Filtra pelo stage_name
+            .loc[lambda df_: df_.groupby('id')['date_created'].idxmax()]  # Mantém o último registro por ID
+            .dropna(subset=['id'])  # Remove linhas com id nulo
+            ['stage_detail'].value_counts()  # Conta os valores de stage_detail
+            .reset_index(name='count')  # Define o nome correto da coluna gerada
+        )
+
+    # Criar o gráfico atualizado
+    fig = px.bar(
+        filtered_df, x='stage_detail', y='count', text='count',
+        title="Visão Geral por Stage Detail"
+    ).update_traces(
+        texttemplate='%{text}', textposition='outside'
+    ).update_layout(
+        uniformtext_minsize=8, uniformtext_mode='hide',
+        plot_bgcolor='white', paper_bgcolor='rgba(0,0,0,0)',
+        xaxis=dict(
+        categoryorder='array', 
+        categoryarray=sorted(filtered_df['stage_detail'], key=sort_stage_detail)
+        ),# Ordenação personalizada,
+        xaxis_title="Estágio no Funil",
+        yaxis_title="Quantidade de Clientes",
+        font={'color': '#003366'}
+
+    )
+
+    return fig
+
+from dash.dependencies import Input, Output
+
+@app.callback(
+    Output('evolucao-leads', 'style'),  # Altera a visibilidade do gráfico
+    Input('stage-detail-filter', 'value')  # Monitora o dropdown
+)
+def toggle_graph_visibility(selected_stage):
+    if selected_stage == "Geral":
+        return {'display': 'block'}  # Mostra o gráfico
+    return {'display': 'none'}  # Esconde o gráfico
     
 if __name__ == '__main__':
     app.run_server(debug=True, use_reloader=False)
