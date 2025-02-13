@@ -13,18 +13,19 @@ import pdb
 def process_data():
 
 
-    df = pd.read_csv('deal_by_stage.csv')
-    df['id'] = df['person'].fillna(df['organization'])
-    df['type'] = df['person'].apply(lambda x: 'person' if pd.notna(x) else 'organization')
+    df = pd.read_csv('deals_to_stage.csv')
+    #df['id'] = df['person'].fillna(df['organization'])
+    #df['type'] = df['person'].apply(lambda x: 'person' if pd.notna(x) else 'organization')
 
     # Remover as colunas 'person' e 'organization'
-    df = df.drop(columns=['person', 'organization'])
+    #df = df.drop(columns=['person', 'organization'])
 
     # Remover números no início da coluna 'stage_name'
     df['stage_name'] = df['stage_name'].str.replace(r'^\d+\s*', '', regex=True)
 
     # Filtragem por data
     df['date_created'] = pd.to_datetime(df['date_created']).dt.date
+    df = df[df['stage_status'] == 'Em andamento']
     return df
     
 
