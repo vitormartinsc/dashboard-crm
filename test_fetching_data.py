@@ -33,7 +33,7 @@ def process_data(deals):
     deal_by_stage = {
         'stage_detail': [], 'stage_name': [], 'stage_number': [], 'stage_status': [],
         'person': [], 'title': [], 'date_created': [], 'date_lost': [], 'date_won': [],
-        'organization': [], 'description': []
+        'organization': [], 'description': [], 'loss_reason': []
     }
 
     for deal in deals:
@@ -41,6 +41,11 @@ def process_data(deals):
         deal_by_stage['stage_number'].append(int(deal['dealStage']['sequence']))
         deal_by_stage['stage_name'].append(deal['dealStage']['funnel']['name'])
         deal_by_stage['stage_status'].append(deal['dealStatus']['name'])
+        if deal['lossReason']:
+            deal_by_stage['loss_reason'].append(deal['lossReason']['name'])
+        else:
+            deal_by_stage['loss_reason'].append(None)
+        
         if deal['person']:
             deal_by_stage['person'].append(deal.get('person', {}).get('id'))
         else:

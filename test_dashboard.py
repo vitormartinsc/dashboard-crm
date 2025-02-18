@@ -28,23 +28,6 @@ def process_data():
     df = df[df['stage_status'] == 'Em andamento']
     return df
     
-
-def process_line_data(df):
-    df = df.copy()
-    
-    # Transformação da coluna 'stage_detail'
-    df['stage_detail'] = df['stage_detail'].replace({
-        'CONTATO': '1.1 LEADS',
-        'TYPEFORM': '2.1 VALIDAÇÃO',
-        'CONTRATO': '3.1 ATIVOS'
-    })
-    
-    # Remover as linhas onde 'stage_detail' começa com "5 " ou "6 "
-    df = df[~df['stage_detail'].str.startswith(('5', '6'))]
-    
-    return df
-    
-
 def process_bar_data(df):
     df = df.copy()
     
@@ -62,6 +45,20 @@ def process_bar_data(df):
     
     return df_bar
 
+# Função de processamento da linha de dados
+def process_line_data(df):
+    df = df.copy()
+    
+    df['stage_detail'] = df['stage_detail'].replace({
+        'CONTATO': '1.1 LEADS',
+        'TYPEFORM': '1.2 QUALIFICAÇÃO',
+        'CONTRATO': '1.6 CONTRATO'
+    })
+    
+    df = df[~df['stage_detail'].str.startswith(('5', '6'))]
+    
+    return df
+
 
 # Buscar os dados **apenas uma vez** ao iniciar o servidor
 df = process_data()
@@ -74,16 +71,6 @@ def process_data():
     df = pd.read_csv('deals_by_stage.csv')
     return df
 
-# Função de processamento da linha de dados
-def process_line_data(df):
-    df = df.copy()
-    df['stage_detail'] = df['stage_detail'].replace({
-        'CONTATO': '1.1 LEADS',
-        'TYPEFORM': '2.1 VALIDAÇÃO',
-        'CONTRATO': '3.1 ATIVOS'
-    })
-    df = df[~df['stage_detail'].str.startswith(('5', '6'))]
-    return df
 
 def sort_stage_detail(stage_detail):
     """Ordena os valores de 'stage_detail' assumindo o formato numérico 'X.Y'"""
@@ -372,17 +359,17 @@ def update_data_table(selected_stage_name):
     Input('stage-detail-filter', 'value')
 )
 def update_bar_chart(selected_stage_name):
+    filtered_df = df.copy()
     # Filtrar os dados conforme a seleção do dropdown
-    if selected_stage_name == 'Geral':
-        filtered_df = df_bar.copy()  # Mantém todos os dados
-    else:
-        filtered_df = (
-            df[df['stage_name'] == selected_stage_name]  # Filtra pelo stage_name
-            .loc[lambda df_: df_.groupby('id')['date_created'].idxmax()]  # Mantém o último registro por ID
-            .dropna(subset=['id'])  # Remove linhas com id nulo
-            ['stage_detail'].value_counts()  # Conta os valores de stage_detail
-            .reset_index(name='count')  # Define o nome correto da coluna gerada
-        )
+    if selected_stage_name != 'Geral':
+        filtered_df = filtered_df[filtered_df['stage_name'] == selected_stage_name]
+        
+    filtered_df = (filtered_df
+        .loc[lambda df_: df_.groupby('id')['date_created'].idxmax()]  # Mantém o último registro por ID
+        .dropna(subset=['id'])  # Remove linhas com id nulo
+        ['stage_detail'].value_counts()  # Conta os valores de stage_detail
+        .reset_index(name='count')  # Define o nome correto da coluna gerada
+    )
 
     # Criar o gráfico atualizado
     fig = px.bar(
