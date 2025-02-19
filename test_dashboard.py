@@ -26,10 +26,11 @@ def process_data(filter_by_status='Em andamento'):
     # Filtragem por data
     df['date_created'] = pd.to_datetime(df['date_created']).dt.date
     df['date_won'] = pd.to_datetime(df['date_won']).dt.date
-
+    df['date_lost'] = pd.to_datetime(df['date_lost']).dt.date
     
     if filter_by_status:
         df = df[df['stage_status'] == 'Em andamento']
+        
     return df
     
 def process_bar_data(df):
@@ -201,7 +202,11 @@ app.layout = html.Div(children=[
     ),
     
     # 📌 **Novo Gráfico**: Barras por Stage Name (Clientes Ganhos)
-    html.Div(id='chart-container'),
+    html.Div(id='chart-won-container'),
+    
+    html.Div(id='chart-lost-container'),
+    
+    dcc.Graph(id='lost-reason-chart'),
     
     # Gráfico de evolução Leads (sem callback, independente)
     dcc.Graph(
@@ -398,13 +403,19 @@ def update_bar_chart(selected_stage_name):
 
 
 @app.callback(
-    Output('chart-container', 'children'),
+    Output('chart-won-container', 'children'),
     [
         Input({'type': 'date-filter', 'index': dash.ALL}, 'start_date'),
-        Input({'type': 'date-filter', 'index': dash.ALL}, 'end_date')
+        Input({'type': 'date-filter', 'index': dash.ALL}, 'end_date'),
+        Input('stage-detail-filter', 'value')
+
     ]
 )
-def update_chart(start_dates, end_dates):
+def update_chart(start_dates, end_dates, selected_stage_name):
+    
+    if selected_stage_name != 'Geral':
+        return None
+    
     if not start_dates or not end_dates:
         return html.Div("Nenhum dado disponível", style={'textAlign': 'center', 'color': '#003366'})
     
@@ -458,7 +469,149 @@ def update_chart(start_dates, end_dates):
                 dcc.Graph(figure=bar_chart, style={'width': '48%', 'display': 'inline-block'}),
             ])
 
+    
     return html.Div("Nenhum dado disponível", style={'textAlign': 'center', 'color': '#003366'})
+
+@app.callback(
+    Output('chart-lost-container', 'children'),
+    [
+        Input({'type': 'date-filter', 'index': dash.ALL}, 'start_date'),
+        Input({'type': 'date-filter', 'index': dash.ALL}, 'end_date'),
+        Input('stage-detail-filter', 'value')
+        
+    ]
+)
+def update_chart(start_dates, end_dates, selected_stage_name):
+    if selected_stage_name != 'Geral':
+        return None
+    
+    if not start_dates or not end_dates:
+        return html.Div("Nenhum dado disponível", style={'textAlign': 'center', 'color': '#003366'})
+    
+    df = process_data(filter_by_status=False)
+
+    for start_date, end_date in zip(start_dates, end_dates):
+        if start_date and end_date:
+            start_date = datetime.fromisoformat(start_date).date()
+            end_date = datetime.fromisoformat(end_date).date()
+
+            # 🔍 Filtrar os dados dentro do período e com status "Perdido"
+            filtered_df = df[(df['date_lost'] >= start_date) & 
+                             (df['date_lost'] <= end_date) & 
+                             (df['stage_status'] == 'Perdido')]
+
+            # 📊 Contar clientes por stage_name
+            grouped_df = filtered_df.groupby('stage_name').size().reset_index(name='total')
+
+            # 🔵 Gráfico de Pizza (Proporção)
+            pie_chart = px.pie(
+                grouped_df, 
+                names='stage_name', 
+                values='total', 
+                hole=0.4,  
+                title="Distribuição Percentual dos Clientes Perdidos"
+            ).update_traces(
+                textposition='inside',
+                textinfo='percent',  # Mostra o percentual e o nome da categoria
+                insidetextorientation='radial'  # Ajusta o texto dentro da fatia
+            )
+
+            # 🔴 Gráfico de Barras (Quantidade)
+            bar_chart = px.bar(
+                grouped_df, 
+                x='stage_name', 
+                y='total', 
+                text='total',
+                title="Quantidade de Clientes Perdidos",
+                color='stage_name', 
+                labels={'total': 'Clientes'},
+            ).update_traces(
+                texttemplate='%{text}', 
+                textposition='outside'
+            ).update_layout(
+                yaxis=dict(range=[0, grouped_df['total'].max() * 1.2])  # Adiciona 20% de espaço extra no topo
+            )
+
+            # Layout lado a lado
+            return html.Div([
+                dcc.Graph(figure=pie_chart, style={'width': '48%', 'display': 'inline-block'}),
+                dcc.Graph(figure=bar_chart, style={'width': '48%', 'display': 'inline-block'}),
+            ])
+
+    return html.Div("Nenhum dado disponível", style={'textAlign': 'center', 'color': '#003366'})
+
+@app.callback(
+    Output('lost-reason-chart', 'figure'),
+    [Input({'type': 'date-filter', 'index': dash.ALL}, 'start_date'),
+     Input({'type': 'date-filter', 'index': dash.ALL}, 'end_date'),
+     Input('stage-detail-filter', 'value')]  # Filtro do stage_name
+)
+def update_loss_reason_chart(start_dates, end_dates, selected_stage_name):
+    fig = go.Figure()
+    df = process_data(filter_by_status=None)
+
+    if not start_dates or not end_dates:
+        return fig  # Retorna gráfico vazio se não houver datas selecionadas
+
+    for i, (start_date, end_date) in enumerate(zip(start_dates, end_dates)):
+        if start_date and end_date:
+            start_date = datetime.fromisoformat(start_date).date()
+            end_date = datetime.fromisoformat(end_date).date()
+
+            # Filtra os clientes perdidos no intervalo de datas
+            filtered_df = df[(df['date_lost'] >= start_date) & 
+                             (df['date_lost'] <= end_date) & 
+                             (df['stage_status'] == 'Perdido')]
+
+            # Substitui valores vazios de 'loss_reason' por "Outro"
+            filtered_df['loss_reason'] = filtered_df['loss_reason'].fillna("Outro")
+
+            # Se um stage_name for selecionado, filtra por ele
+            if selected_stage_name != 'Geral':
+                filtered_df = filtered_df[filtered_df['stage_name'] == selected_stage_name]
+
+            # Conta os motivos de perda e ordena do maior para o menor
+            loss_reason_counts = (filtered_df.groupby('loss_reason')
+                                  .size()
+                                  .reset_index(name='total'))
+
+            # Soma total das perdas
+            total_losses = loss_reason_counts['total'].sum()
+
+            # Adiciona a barra "Total" com uma cor diferente
+            loss_reason_counts = pd.concat([
+                loss_reason_counts, 
+                pd.DataFrame({'loss_reason': ['Total'], 'total': [total_losses]})
+            ]).sort_values(by='total', ascending=False)
+
+            # Criar gráfico de barras com labels acima das barras
+            fig.add_trace(go.Bar(
+                x=loss_reason_counts['loss_reason'],
+                y=loss_reason_counts['total'],
+                text=loss_reason_counts['total'],  # Adiciona os valores
+                textposition='outside',  # Posiciona o texto acima das barras
+                marker_color=['#ff7f0e'] + ['#1f77b4'] * (len(loss_reason_counts) - 1),  # Azul padrão, última barra laranja
+                name=f'Filtro {i + 1}'
+            )).update_layout(
+                yaxis=dict(range=[0, loss_reason_counts['total'].max() * 1.2])
+            )
+
+    # Configuração do layout
+    fig.update_layout(
+        title="Motivos de Perda",
+        xaxis_title="Motivo de Perda",
+        yaxis_title="Total de Clientes Perdidos",
+        barmode='group',
+        uniformtext_minsize=8,  # Tamanho mínimo dos textos
+        uniformtext_mode='hide',  # Esconde textos sobrepostos
+        plot_bgcolor='rgba(0,0,0,0)', 
+        paper_bgcolor='rgba(0,0,0,0)', 
+        font={'color': '#003366'},
+        showlegend=True
+    )
+
+    return fig
+
 
 @app.callback(
     Output('evolucao-leads', 'style'),  # Altera a visibilidade do gráfico
