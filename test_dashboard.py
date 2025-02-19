@@ -10,7 +10,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pdb
 
-def process_data():
+def process_data(filter_by_status='Em andamento'):
 
 
     df = pd.read_csv('deals_to_stage.csv')
@@ -25,7 +25,11 @@ def process_data():
 
     # Filtragem por data
     df['date_created'] = pd.to_datetime(df['date_created']).dt.date
-    df = df[df['stage_status'] == 'Em andamento']
+    df['date_won'] = pd.to_datetime(df['date_won']).dt.date
+
+    
+    if filter_by_status:
+        df = df[df['stage_status'] == 'Em andamento']
     return df
     
 def process_bar_data(df):
@@ -65,12 +69,6 @@ df = process_data()
 df_line = process_line_data(df)
 df_line['date_created'] = pd.to_datetime(df_line['date_created']).dt.date
 df_bar = process_bar_data(df)
-
-# Função de processamento de dados
-def process_data():
-    df = pd.read_csv('deals_by_stage.csv')
-    return df
-
 
 def sort_stage_detail(stage_detail):
     """Ordena os valores de 'stage_detail' assumindo o formato numérico 'X.Y'"""
@@ -201,6 +199,10 @@ app.layout = html.Div(children=[
             font={'color': '#003366'}
         )
     ),
+    
+    # 📌 **Novo Gráfico**: Barras por Stage Name (Clientes Ganhos)
+    html.Div(id='chart-container'),
+    
     # Gráfico de evolução Leads (sem callback, independente)
     dcc.Graph(
         id='evolucao-leads',
@@ -386,13 +388,77 @@ def update_bar_chart(selected_stage_name):
         ),# Ordenação personalizada,
         xaxis_title="Estágio no Funil",
         yaxis_title="Quantidade de Clientes",
+        yaxis=dict(range=[0, filtered_df['count'].max() * 1.2]),  # Adiciona 20% de espaço extra no topo
         font={'color': '#003366'}
 
     )
 
     return fig
 
-from dash.dependencies import Input, Output
+
+
+@app.callback(
+    Output('chart-container', 'children'),
+    [
+        Input({'type': 'date-filter', 'index': dash.ALL}, 'start_date'),
+        Input({'type': 'date-filter', 'index': dash.ALL}, 'end_date')
+    ]
+)
+def update_chart(start_dates, end_dates):
+    if not start_dates or not end_dates:
+        return html.Div("Nenhum dado disponível", style={'textAlign': 'center', 'color': '#003366'})
+    
+    df = process_data(filter_by_status=False)
+
+    for start_date, end_date in zip(start_dates, end_dates):
+        if start_date and end_date:
+            start_date = datetime.fromisoformat(start_date).date()
+            end_date = datetime.fromisoformat(end_date).date()
+
+            # 🔍 Filtrar os dados dentro do período e com status "Ganho"
+            filtered_df = df[(df['date_won'] >= start_date) & 
+                             (df['date_won'] <= end_date) & 
+                             (df['stage_status'] == 'Ganho')]
+
+            # 📊 Contar clientes por stage_name
+            grouped_df = filtered_df.groupby('stage_name').size().reset_index(name='total')
+
+            # 🔵 Gráfico de Pizza (Proporção)
+            pie_chart = px.pie(
+                grouped_df, 
+                names='stage_name', 
+                values='total', 
+                hole=0.4,  
+                title="Distribuição Percentual dos Clientes Ganhos"
+            ).update_traces(
+                textposition='inside',
+                textinfo='percent',  # Mostra o percentual e o nome da categoria
+                insidetextorientation='radial'  # Ajusta o texto dentro da fatia
+            )
+
+            # 🔴 Gráfico de Barras (Quantidade)
+            bar_chart = px.bar(
+                grouped_df, 
+                x='stage_name', 
+                y='total', 
+                text='total',
+                title="Quantidade de Clientes Ganhos",
+                color='stage_name', 
+                labels={'total': 'Clientes'},
+            ).update_traces(
+                texttemplate='%{text}', 
+                textposition='outside'
+            ).update_layout(
+                yaxis=dict(range=[0, grouped_df['total'].max() * 1.2])  # Adiciona 20% de espaço extra no topo
+            )
+
+            # Layout lado a lado
+            return html.Div([
+                dcc.Graph(figure=pie_chart, style={'width': '48%', 'display': 'inline-block'}),
+                dcc.Graph(figure=bar_chart, style={'width': '48%', 'display': 'inline-block'}),
+            ])
+
+    return html.Div("Nenhum dado disponível", style={'textAlign': 'center', 'color': '#003366'})
 
 @app.callback(
     Output('evolucao-leads', 'style'),  # Altera a visibilidade do gráfico
